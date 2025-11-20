@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Node runtime dependencies
+        run: npm run node:install
+
       - name: Build web bundle
         run: npm run build
 
@@ -73,6 +76,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Node runtime dependencies
+        run: npm run node:install
 
       - name: Build web bundle
         run: npm run build

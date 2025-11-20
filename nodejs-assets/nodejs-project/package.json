@@ -1,0 +1,12 @@
+{
+  "name": "noname-mobile-node",
+  "version": "0.0.1",
+  "private": true,
+  "main": "main.js",
+  "dependencies": {
+    "adm-zip": "^0.5.15",
+    "node-static": "^0.7.11",
+    "noname-mobile": "file:../..",
+    "ws": "^8.18.0"
+  }
+}
