@@ -12,9 +12,6 @@ jobs:
   build-android:
     name: Android Debug APK
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: noname-mobile
     env:
       CAP_NO_PROMPT: 'true'
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -58,9 +55,6 @@ jobs:
     name: iOS Simulator Build
     runs-on: macos-latest
     needs: build-android
-    defaults:
-      run:
-        working-directory: noname-mobile
     env:
       CAP_NO_PROMPT: 'true'
     steps:
