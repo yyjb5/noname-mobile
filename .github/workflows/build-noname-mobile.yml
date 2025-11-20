@@ -1,0 +1,118 @@
+name: Build Noname Mobile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "noname-mobile/**"
+      - "noname-mobile/.github/workflows/build-noname-mobile.yml"
+
+jobs:
+  build-android:
+    name: Android Debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: noname-mobile
+    env:
+      CAP_NO_PROMPT: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: noname-mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
+
+      - name: Prepare Gradle wrapper
+        run: |
+          chmod +x android/gradlew
+          sed -i 's/\r$//' android/gradlew
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug
+        working-directory: noname-mobile/android
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: noname-mobile-android-debug
+          path: noname-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+  build-ios:
+    name: iOS Simulator Build
+    runs-on: macos-latest
+    needs: build-android
+    defaults:
+      run:
+        working-directory: noname-mobile
+    env:
+      CAP_NO_PROMPT: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: noname-mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Sync Capacitor iOS project
+        run: npx cap sync ios
+
+      - name: Build iOS (simulator)
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Automatic
+
+      - name: Archive simulator build
+        run: |
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent build/Build/Products/Debug-iphonesimulator/App.app artifacts/noname-mobile-ios-simulator.zip
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: noname-mobile-ios-simulator
+          path: noname-mobile/artifacts/noname-mobile-ios-simulator.zip
