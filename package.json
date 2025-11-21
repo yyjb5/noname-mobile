@@ -12,7 +12,8 @@
     "lint": "eslint",
     "node:install": "npm install --prefix nodejs-assets/nodejs-project --no-package-lock",
     "cap:sync:android": "npx cap sync android && node scripts/prepare-nodejs-mobile-assets.mjs android",
-    "cap:sync:ios": "node scripts/prepare-nodejs-mobile-assets.mjs ios && npx cap sync ios && node scripts/prepare-nodejs-mobile-assets.mjs ios"
+    "cap:sync:ios": "node scripts/prepare-nodejs-mobile-assets.mjs ios && npx cap sync ios && node scripts/prepare-nodejs-mobile-assets.mjs ios",
+    "cap:sync": "npm run cap:sync:android && npm run cap:sync:ios"
   },
   "dependencies": {
     "@capacitor/android": "7.4.4",

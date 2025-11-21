@@ -91,6 +91,14 @@ jobs:
       - name: Sync Capacitor iOS project
         run: npm run cap:sync:ios
 
+      - name: Prepare Node.js mobile assets (iOS)
+        run: node scripts/prepare-nodejs-mobile-assets.mjs ios
+
+      - name: Verify libuv headers
+        run: |
+          ls ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova/include/node
+          ls ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova/include/node/uv
+
       - name: Build iOS (simulator)
         run: |
           xcodebuild \
