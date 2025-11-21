@@ -1,3 +1,4 @@
+require 'fileutils'
 require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
 
 platform :ios, '14.0'
@@ -27,4 +28,29 @@ end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
+
+  source_root = File.expand_path('../capacitor-cordova-ios-plugins/sources/NodejsMobileCordova', __dir__)
+  next unless Dir.exist?(source_root)
+
+  pods_root = installer.sandbox.root
+  cordova_root = File.join(pods_root, 'CordovaPlugins')
+  next unless Dir.exist?(cordova_root)
+
+  pod_sources_dest = File.join(cordova_root, 'sources', 'NodejsMobileCordova')
+  FileUtils.rm_rf(pod_sources_dest)
+  FileUtils.mkdir_p(File.dirname(pod_sources_dest))
+  FileUtils.cp_r(source_root, pod_sources_dest)
+
+  plugin_root = File.join(cordova_root, 'Plugins', 'nodejs-mobile-cordova')
+  if Dir.exist?(plugin_root)
+    %w[include libs].each do |segment|
+      segment_source = File.join(source_root, segment)
+      next unless Dir.exist?(segment_source)
+
+      segment_destination = File.join(plugin_root, segment)
+      FileUtils.rm_rf(segment_destination)
+      FileUtils.mkdir_p(File.dirname(segment_destination))
+      FileUtils.cp_r(segment_source, segment_destination)
+    end
+  end
 end
