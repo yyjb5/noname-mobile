@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { cp, mkdir, rm, stat, lstat, readdir } from 'node:fs/promises';
+import { cp, mkdir, rm, stat, lstat, readdir, rename } from 'node:fs/promises';
 import { existsSync, createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
@@ -110,12 +110,39 @@ async function ensureAndroidNativeArtifacts() {
     recursive: true,
     filter: (source) => !source.replace(/\\/g, '/').endsWith('/libnode.so')
   });
+  await ensureLibnodeLayout(appNativeRoot);
   await ensureLibnodeUncompressed(appNativeRoot);
 }
 
+async function ensureLibnodeLayout(nativeRoot) {
+  const libnodeRoot = join(nativeRoot, 'libnode');
+  const binSource = join(nativeRoot, 'bin');
+  const includeSource = join(nativeRoot, 'include');
+  const binDestination = join(libnodeRoot, 'bin');
+  const includeDestination = join(libnodeRoot, 'include');
+
+  if (!existsSync(libnodeRoot)) {
+    await mkdir(libnodeRoot, { recursive: true });
+  }
+
+  if (existsSync(binSource)) {
+    await rm(binDestination, { recursive: true, force: true });
+    await rename(binSource, binDestination);
+  }
+
+  if (existsSync(includeSource)) {
+    await rm(includeDestination, { recursive: true, force: true });
+    await rename(includeSource, includeDestination);
+  }
+}
+
 async function ensureLibnodeUncompressed(nativeRoot) {
-  const binDir = join(nativeRoot, 'bin');
-  if (!existsSync(binDir)) {
+  const binDirCandidates = [
+    join(nativeRoot, 'libnode', 'bin'),
+    join(nativeRoot, 'bin')
+  ];
+  const binDir = binDirCandidates.find((candidate) => existsSync(candidate));
+  if (!binDir) {
     return;
   }
 
