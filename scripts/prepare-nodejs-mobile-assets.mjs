@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { cp, mkdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, rm, stat, lstat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,9 +53,27 @@ async function ensureNodeProjectExists() {
 }
 
 async function copyNodeProject(destination) {
+  await pruneWorkspaceSymlink();
   await rm(destination, { recursive: true, force: true });
   await mkdir(destination, { recursive: true });
-  await cp(nodeProjectSource, destination, { recursive: true });
+  await cp(nodeProjectSource, destination, {
+    recursive: true,
+    filter: (source) => !source.includes('node_modules/noname-mobile')
+  });
+}
+
+async function pruneWorkspaceSymlink() {
+  const candidate = join(nodeProjectSource, 'node_modules', 'noname-mobile');
+  try {
+    const info = await lstat(candidate);
+    if (info.isSymbolicLink() || info.isDirectory()) {
+      await rm(candidate, { recursive: true, force: true });
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
 }
 
 async function main() {
