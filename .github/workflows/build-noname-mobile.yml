@@ -94,10 +94,11 @@ jobs:
       - name: Prepare Node.js mobile assets (iOS)
         run: node scripts/prepare-nodejs-mobile-assets.mjs ios
 
-      - name: Verify libuv headers
+      - name: Ensure libuv headers in Pods
         run: |
-          ls ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova/include/node
-          ls ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova/include/node/uv
+          mkdir -p ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova
+          rsync -a ios/capacitor-cordova-ios-plugins/sources/NodejsMobileCordova/include/ ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova/include/
+          find ios/App/Pods/CordovaPlugins/Plugins/nodejs-mobile-cordova/include -path "*uv/errno.h" -print
 
       - name: Build iOS (simulator)
         run: |
