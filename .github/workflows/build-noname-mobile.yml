@@ -38,6 +38,11 @@ jobs:
       - name: Sync Capacitor Android project
         run: npm run cap:sync:android
 
+      - name: List Node.js mobile native assets
+        run: |
+          ls -R android/app/libs/cdvnodejsmobile || true
+          find android/app/libs -name 'libnode.so' -print
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
