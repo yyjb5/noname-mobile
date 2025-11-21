@@ -85,15 +85,15 @@ async function pruneWorkspaceSymlink() {
 }
 
 async function ensureAndroidNativeArtifacts() {
+  const pluginProjectRoot = join(projectRoot, 'android', 'capacitor-cordova-android-plugins');
   const pluginNativeRoot = join(
-    projectRoot,
-    'android',
-    'capacitor-cordova-android-plugins',
+    pluginProjectRoot,
     'src',
     'main',
     'libs',
     'cdvnodejsmobile'
   );
+  const pluginLegacyNativeRoot = join(pluginProjectRoot, 'libs', 'cdvnodejsmobile');
   const appLibsRoot = join(projectRoot, 'android', 'app', 'libs');
   const appNativeRoot = join(appLibsRoot, 'cdvnodejsmobile');
 
@@ -104,12 +104,16 @@ async function ensureAndroidNativeArtifacts() {
     return;
   }
 
+  await ensureLibnodeLayout(pluginNativeRoot);
+  await ensureLibnodeUncompressed(pluginNativeRoot);
+
+  await mkdir(join(pluginProjectRoot, 'libs'), { recursive: true });
+  await rm(pluginLegacyNativeRoot, { recursive: true, force: true });
+  await cp(pluginNativeRoot, pluginLegacyNativeRoot, { recursive: true });
+
   await mkdir(appLibsRoot, { recursive: true });
   await rm(appNativeRoot, { recursive: true, force: true });
-  await cp(pluginNativeRoot, appNativeRoot, {
-    recursive: true,
-    filter: (source) => !source.replace(/\\/g, '/').endsWith('/libnode.so')
-  });
+  await cp(pluginNativeRoot, appNativeRoot, { recursive: true });
   await ensureLibnodeLayout(appNativeRoot);
   await ensureLibnodeUncompressed(appNativeRoot);
 }
