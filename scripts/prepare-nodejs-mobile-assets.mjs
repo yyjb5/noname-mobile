@@ -278,35 +278,70 @@ async function patchCapacitorCliDirectoryGuard() {
     return;
   }
 
-  const marker = 'Skip directories when reading native plugin files';
+  const skipMarker = 'Skip directories when reading native plugin files';
+  const frameworkMarker = 'Normalize custom framework names';
 
   let fileContent = await readFile(updateJsPath, 'utf-8');
-  if (fileContent.includes(marker)) {
-    return;
+  let updatedContent = fileContent;
+  const getFrameworkRegex = /function getFrameworkName\(framework\) {\r?\n[\s\S]*?\r?\n}/;
+
+  if (!updatedContent.includes(skipMarker)) {
+    const originalSnippet =
+      "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
+      "            if (!codeFile.$.framework) {\n" +
+      "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
+
+    if (!updatedContent.includes(originalSnippet)) {
+      console.warn('Unable to apply Capacitor CLI patch: expected snippet not found.');
+    } else {
+      const patchedSnippet =
+        "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
+        "            if (!codeFile.$.framework) {\n" +
+        "                // Skip directories when reading native plugin files\n" +
+        "                const destStats = await (0, fs_extra_1.stat)(fileDest).catch(() => undefined);\n" +
+        "                if (!destStats || !destStats.isFile()) {\n" +
+        "                    continue;\n" +
+        "                }\n" +
+        "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
+
+      updatedContent = updatedContent.replace(originalSnippet, patchedSnippet);
+    }
   }
 
-  const originalSnippet =
-    "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
-    "            if (!codeFile.$.framework) {\n" +
-    "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
+  const existingFrameworkFunction = updatedContent.match(getFrameworkRegex);
+  const frameworkFunctionText = existingFrameworkFunction ? existingFrameworkFunction[0] : '';
+  const frameworkPattern = String.raw`framework.$.src.replace(/\\/g, '/')`;
+  const needsFrameworkPatch =
+    !existingFrameworkFunction ||
+    !frameworkFunctionText.includes(frameworkMarker) ||
+    !frameworkFunctionText.includes('return normalizedSrc;') ||
+    !frameworkFunctionText.includes(frameworkPattern);
 
-  if (!fileContent.includes(originalSnippet)) {
-    console.warn('Unable to apply Capacitor CLI patch: expected snippet not found.');
-    return;
+  if (needsFrameworkPatch) {
+    const patchedFunction = String.raw`function getFrameworkName(framework) {
+    // Normalize custom framework names to avoid including directory prefixes
+    const normalizedSrc = framework.$.src.replace(/\\/g, '/');
+    const filename = normalizedSrc.split('/').pop() || normalizedSrc;
+    const baseName = filename.includes('.') ? filename.substring(0, filename.indexOf('.')) : filename;
+    if (isFramework(framework)) {
+        if (framework.$.custom && framework.$.custom === 'true') {
+            return normalizedSrc;
+        }
+        return baseName;
+    }
+    return baseName.replace(/^lib/, '');
+}`;
+
+    if (!existingFrameworkFunction) {
+      console.warn('Unable to apply Capacitor CLI patch: framework helper not found.');
+    }
+
+    updatedContent = updatedContent.replace(getFrameworkRegex, patchedFunction);
   }
 
-  const patchedSnippet =
-    "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
-    "            if (!codeFile.$.framework) {\n" +
-    "                // Skip directories when reading native plugin files\n" +
-    "                const destStats = await (0, fs_extra_1.stat)(fileDest).catch(() => undefined);\n" +
-    "                if (!destStats || !destStats.isFile()) {\n" +
-    "                    continue;\n" +
-    "                }\n" +
-    "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
-
-  fileContent = fileContent.replace(originalSnippet, patchedSnippet);
-  await writeFile(updateJsPath, fileContent, 'utf-8');
+  if (updatedContent !== fileContent) {
+    await writeFile(updateJsPath, updatedContent, 'utf-8');
+  }
 }
 
 async function normalizeCordovaPodspec() {
