@@ -13,6 +13,11 @@ class NodeController {
     private listeners = new Set<Listener>();
     private bridgePromise: Promise<NonNullable<typeof window.nodejs>> | null = null;
     private startPromise: Promise<void> | null = null;
+    constructor() {
+        if (typeof window !== 'undefined') {
+            window.__nonameNodeController = this;
+        }
+    }
 
     async ensureStarted(): Promise<void> {
         if (this.started) {
@@ -30,6 +35,7 @@ class NodeController {
 
     async send(message: NodeMessage): Promise<void> {
         const bridge = await this.resolveBridge();
+        this.debug('send', message);
         bridge.channel.send(message);
     }
 
@@ -42,8 +48,11 @@ class NodeController {
 
     private async startInternal(): Promise<void> {
         const bridge = await this.resolveBridge();
+        this.debug('bridge ready, starting main.js');
         bridge.channel.on('message', (raw: unknown) => {
+            this.debug('incoming raw', raw);
             const message = this.normalizeIncoming(raw);
+            this.debug('incoming normalized', message);
             if (!message) {
                 return;
             }
@@ -62,6 +71,7 @@ class NodeController {
     private async resolveBridge(): Promise<NonNullable<typeof window.nodejs>> {
         const existing = this.acquireBridge();
         if (existing) {
+            this.debug('bridge already available');
             return existing;
         }
         if (!this.bridgePromise) {
@@ -94,6 +104,7 @@ class NodeController {
                 }
                 const bridge = this.acquireBridge();
                 if (bridge) {
+                    this.debug('bridge acquired via polling');
                     cleanup();
                     resolve(bridge);
                     return;
@@ -120,6 +131,7 @@ class NodeController {
 
     private acquireBridge(): NonNullable<typeof window.nodejs> | null {
         if (window.nodejs) {
+            this.debug('window.nodejs already set');
             return window.nodejs;
         }
         const cordovaRequire = window.cordova?.require;
@@ -128,10 +140,12 @@ class NodeController {
                 const plugin = cordovaRequire('nodejs-mobile-cordova.nodejs') as NonNullable<typeof window.nodejs> | undefined;
                 if (plugin) {
                     window.nodejs = plugin;
+                    this.debug('cordova.require resolved nodejs plugin');
                     return plugin;
                 }
             } catch {
                 // The module is not ready yet; keep polling.
+                this.debug('cordova.require failed, will retry');
             }
         }
         return null;
@@ -180,6 +194,28 @@ class NodeController {
             typeof value === 'object' &&
             typeof (value as NodeMessage).type === 'string'
         );
+    }
+
+    private debug(label: string, value?: unknown): void {
+        if (!this.isDebugEnabled()) {
+            return;
+        }
+        if (typeof value === 'undefined') {
+            console.debug('[NodeController]', label);
+        } else {
+            console.debug('[NodeController]', label, value);
+        }
+    }
+
+    private isDebugEnabled(): boolean {
+        return typeof window !== 'undefined' && Boolean(window.__NONAME_DEBUG__);
+    }
+}
+
+declare global {
+    interface Window {
+        __NONAME_DEBUG__?: boolean;
+        __nonameNodeController?: NodeController;
     }
 }
 
