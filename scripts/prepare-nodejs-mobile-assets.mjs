@@ -156,6 +156,8 @@ async function ensureIosNativeArtifacts() {
   if (existsSync(capacitorPluginResources)) {
     await ensureNodeMobileFramework(capacitorPluginResources);
   }
+
+  await normalizeCordovaPodspec();
 }
 
 async function ensureLibnodeLayout(nativeRoot) {
@@ -305,6 +307,35 @@ async function patchCapacitorCliDirectoryGuard() {
 
   fileContent = fileContent.replace(originalSnippet, patchedSnippet);
   await writeFile(updateJsPath, fileContent, 'utf-8');
+}
+
+async function normalizeCordovaPodspec() {
+  const podspecPath = join(
+    projectRoot,
+    'ios',
+    'capacitor-cordova-ios-plugins',
+    'CordovaPlugins.podspec'
+  );
+
+  if (!existsSync(podspecPath)) {
+    return;
+  }
+
+  let fileContent = await readFile(podspecPath, 'utf-8');
+  const normalized = fileContent
+    .replace(/\\/g, '/')
+    .replace(/(s\.frameworks\s*=\s*')(.*?)(')/, (_match, prefix, value, suffix) => {
+      if (!/[\\/]/.test(value)) {
+        return `${prefix}${value}${suffix}`;
+      }
+      const parts = value.split(/[\\/]/).filter(Boolean);
+      const frameworkName = parts.length > 0 ? parts[parts.length - 1] : value;
+      return `${prefix}${frameworkName}${suffix}`;
+    });
+
+  if (normalized !== fileContent) {
+    await writeFile(podspecPath, normalized, 'utf-8');
+  }
 }
 
 async function main() {
