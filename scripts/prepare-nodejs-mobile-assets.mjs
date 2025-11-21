@@ -452,8 +452,32 @@ async function normalizeCordovaPodspec() {
       }
     );
 
-  if (normalized !== fileContent) {
-    await writeFile(podspecPath, normalized, "utf-8");
+  const systemHeaderBlock =
+    "    s.pod_target_xcconfig = {\n" +
+    "      'SYSTEM_HEADER_SEARCH_PATHS' => '$(inherited) \"$(SRCROOT)/$(PRODUCT_NAME)/Plugins/nodejs-mobile-cordova/include/node\"',\n" +
+    "    }\n";
+
+  let updated = normalized;
+
+  if (/s\.compiler_flags\s*=/.test(updated)) {
+    updated = updated.replace(
+      /^\s*s\.compiler_flags\s*=\s*[^\n]*\r?\n/m,
+      systemHeaderBlock
+    );
+  } else if (!/s\.pod_target_xcconfig\s*=/.test(updated)) {
+    const anchorPattern = /(\s*s\.exclude_files\s*=\s*[^\n]*\r?\n)/;
+    if (anchorPattern.test(updated)) {
+      updated = updated.replace(anchorPattern, `$1${systemHeaderBlock}`);
+    }
+  } else {
+    updated = updated.replace(
+      /s\.pod_target_xcconfig\s*=\s*\{[\s\S]*?\}\s*/,
+      systemHeaderBlock
+    );
+  }
+
+  if (updated !== fileContent) {
+    await writeFile(podspecPath, updated, "utf-8");
   }
 }
 
