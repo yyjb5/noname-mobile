@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { cp, mkdir, rm, stat, lstat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { cp, mkdir, rm, stat, lstat, readdir } from 'node:fs/promises';
+import { existsSync, createReadStream, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { createGunzip } from 'node:zlib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -105,6 +107,39 @@ async function ensureAndroidNativeArtifacts() {
   await mkdir(appLibsRoot, { recursive: true });
   await rm(appNativeRoot, { recursive: true, force: true });
   await cp(pluginNativeRoot, appNativeRoot, { recursive: true });
+  await ensureLibnodeUncompressed(appNativeRoot);
+}
+
+async function ensureLibnodeUncompressed(nativeRoot) {
+  const binDir = join(nativeRoot, 'bin');
+  if (!existsSync(binDir)) {
+    return;
+  }
+
+  const architectures = await readdir(binDir);
+  await Promise.all(
+    architectures.map(async (arch) => {
+      const archDir = join(binDir, arch);
+      const gzPath = join(archDir, 'libnode.so.gz');
+      const soPath = join(archDir, 'libnode.so');
+      try {
+        const gzStats = await stat(gzPath);
+        if (gzStats.isFile()) {
+          await rm(soPath, { force: true });
+          await decompressGzip(gzPath, soPath);
+          await rm(gzPath, { force: true });
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+      }
+    })
+  );
+}
+
+async function decompressGzip(source, destination) {
+  await pipeline(createReadStream(source), createGunzip(), createWriteStream(destination));
 }
 
 async function main() {
