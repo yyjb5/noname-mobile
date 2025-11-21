@@ -106,7 +106,10 @@ async function ensureAndroidNativeArtifacts() {
 
   await mkdir(appLibsRoot, { recursive: true });
   await rm(appNativeRoot, { recursive: true, force: true });
-  await cp(pluginNativeRoot, appNativeRoot, { recursive: true });
+  await cp(pluginNativeRoot, appNativeRoot, {
+    recursive: true,
+    filter: (source) => !source.replace(/\\/g, '/').endsWith('/libnode.so')
+  });
   await ensureLibnodeUncompressed(appNativeRoot);
 }
 
@@ -133,6 +136,15 @@ async function ensureLibnodeUncompressed(nativeRoot) {
         if (error.code !== 'ENOENT') {
           throw error;
         }
+      }
+
+      try {
+        const soStats = await stat(soPath);
+        if (!soStats.isFile()) {
+          throw new Error();
+        }
+      } catch {
+        throw new Error(`Missing libnode.so for architecture ${arch} at ${soPath}`);
       }
     })
   );
