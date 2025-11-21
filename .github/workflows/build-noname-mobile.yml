@@ -36,7 +36,7 @@ jobs:
         run: npm run build
 
       - name: Sync Capacitor Android project
-        run: npx cap sync android
+        run: npm run cap:sync:android
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -84,7 +84,7 @@ jobs:
         run: npm run build
 
       - name: Sync Capacitor iOS project
-        run: npx cap sync ios
+        run: npm run cap:sync:ios
 
       - name: Build iOS (simulator)
         run: |
