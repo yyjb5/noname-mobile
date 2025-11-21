@@ -77,9 +77,6 @@ class NodeController {
         if (typeof window === 'undefined') {
             return Promise.reject(new Error('Node.js mobile runtime is not available'));
         }
-        if (!window.cordova) {
-            return Promise.reject(new Error('Node.js mobile runtime requires a native build'));
-        }
 
         return new Promise((resolve, reject) => {
             let resolved = false;
