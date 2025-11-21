@@ -157,6 +157,8 @@ async function ensureIosNativeArtifacts() {
     await ensureNodeMobileFramework(capacitorPluginResources);
   }
 
+  await synchronizePodsCordovaPlugin();
+
   await normalizeCordovaPodspec();
 }
 
@@ -342,6 +344,40 @@ async function patchCapacitorCliDirectoryGuard() {
   if (updatedContent !== fileContent) {
     await writeFile(updateJsPath, updatedContent, 'utf-8');
   }
+}
+
+async function synchronizePodsCordovaPlugin() {
+  const podsRoot = join(projectRoot, 'ios', 'App', 'Pods', 'CordovaPlugins');
+  const sourceRoot = join(projectRoot, 'ios', 'capacitor-cordova-ios-plugins', 'sources', 'NodejsMobileCordova');
+
+  if (!existsSync(podsRoot) || !existsSync(sourceRoot)) {
+    return;
+  }
+
+  const podSourcesDestination = join(podsRoot, 'sources', 'NodejsMobileCordova');
+  await copyDirectory(sourceRoot, podSourcesDestination);
+
+  const podPluginsRoot = join(podsRoot, 'Plugins', 'nodejs-mobile-cordova');
+  if (existsSync(podPluginsRoot)) {
+    const includeSource = join(sourceRoot, 'include');
+    if (existsSync(includeSource)) {
+      await copyDirectory(includeSource, join(podPluginsRoot, 'include'));
+    }
+
+    const libsSource = join(sourceRoot, 'libs');
+    if (existsSync(libsSource)) {
+      await copyDirectory(libsSource, join(podPluginsRoot, 'libs'));
+    }
+  }
+}
+
+async function copyDirectory(source, destination) {
+  if (!existsSync(source)) {
+    return;
+  }
+  await mkdir(dirname(destination), { recursive: true });
+  await rm(destination, { recursive: true, force: true });
+  await cp(source, destination, { recursive: true });
 }
 
 async function normalizeCordovaPodspec() {

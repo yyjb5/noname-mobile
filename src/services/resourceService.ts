@@ -134,6 +134,10 @@ class ResourceService {
       case 'download-progress':
         this.updateProgress(message.payload);
         break;
+      case 'download-started':
+        this.progress = { downloaded: 0, total: 0 };
+        this.emitProgress();
+        break;
       case 'download-complete':
         this.updateState(message.payload);
         this.progress = null;
