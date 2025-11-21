@@ -138,6 +138,9 @@ function normalizeMessage(raw) {
     return null;
   }
   if (typeof raw === "object" && !Array.isArray(raw)) {
+    if (raw.event === "message") {
+      return extractEnvelopePayload(raw.payload ?? null);
+    }
     return raw;
   }
   if (Array.isArray(raw)) {
@@ -153,16 +156,11 @@ function normalizeMessage(raw) {
   if (typeof raw === "string") {
     const parsed = safeParse(raw);
     if (parsed && typeof parsed === "object") {
-      if (
-        parsed.event === "message" &&
-        Array.isArray(parsed.payload) &&
-        parsed.payload.length > 0
-      ) {
-        const [payload] = parsed.payload;
-        if (payload && typeof payload === "object") {
-          return payload;
+      if (parsed.event === "message") {
+        const envelopePayload = extractEnvelopePayload(parsed.payload);
+        if (envelopePayload) {
+          return envelopePayload;
         }
-        return safeParse(payload);
       }
       return parsed;
     }
@@ -179,6 +177,30 @@ function safeParse(candidate) {
   } catch (error) {
     return null;
   }
+}
+
+function extractEnvelopePayload(payload) {
+  if (!payload) {
+    return null;
+  }
+  const values = Array.isArray(payload)
+    ? payload
+    : typeof payload === "string"
+    ? safeParse(payload)
+    : null;
+
+  if (!values || !Array.isArray(values) || values.length === 0) {
+    return null;
+  }
+
+  const [first] = values;
+  if (first && typeof first === "object") {
+    return first;
+  }
+  if (typeof first === "string") {
+    return safeParse(first);
+  }
+  return null;
 }
 
 async function handleDownload() {
