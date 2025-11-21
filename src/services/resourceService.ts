@@ -215,11 +215,9 @@ class ResourceService {
     }
 
     private safeSend(message: NodeMessage): void {
-        try {
-            nodeController.send(message);
-        } catch (err) {
+        nodeController.send(message).catch((err) => {
             this.emitError(err instanceof Error ? err.message : String(err));
-        }
+        });
     }
 }
 
