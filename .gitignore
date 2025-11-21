@@ -12,6 +12,7 @@
 /dist
 /nodejs-assets/nodejs-project/node_modules
 /android/capacitor-cordova-android-plugins/src/main/assets/www
+/android/app/libs
 
 # misc
 .DS_Store

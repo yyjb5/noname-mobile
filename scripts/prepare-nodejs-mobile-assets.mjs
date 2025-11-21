@@ -21,6 +21,12 @@ const SUPPORTED_PLATFORMS = {
   )
 };
 
+const PLATFORM_POST_STEPS = {
+  async android() {
+    await ensureAndroidNativeArtifacts();
+  }
+};
+
 function parseTargets() {
   const raw = process.argv.slice(2);
   if (raw.length === 0) {
@@ -58,7 +64,7 @@ async function copyNodeProject(destination) {
   await mkdir(destination, { recursive: true });
   await cp(nodeProjectSource, destination, {
     recursive: true,
-    filter: (source) => !source.includes('node_modules/noname-mobile')
+    filter: (source) => !source.replace(/\\/g, '/').includes('node_modules/noname-mobile')
   });
 }
 
@@ -74,6 +80,31 @@ async function pruneWorkspaceSymlink() {
       throw error;
     }
   }
+}
+
+async function ensureAndroidNativeArtifacts() {
+  const pluginNativeRoot = join(
+    projectRoot,
+    'android',
+    'capacitor-cordova-android-plugins',
+    'src',
+    'main',
+    'libs',
+    'cdvnodejsmobile'
+  );
+  const appLibsRoot = join(projectRoot, 'android', 'app', 'libs');
+  const appNativeRoot = join(appLibsRoot, 'cdvnodejsmobile');
+
+  if (!existsSync(pluginNativeRoot)) {
+    console.warn(
+      `Native assets not found at ${pluginNativeRoot}. The nodejs-mobile plugin may not have been synced.`
+    );
+    return;
+  }
+
+  await mkdir(appLibsRoot, { recursive: true });
+  await rm(appNativeRoot, { recursive: true, force: true });
+  await cp(pluginNativeRoot, appNativeRoot, { recursive: true });
 }
 
 async function main() {
@@ -93,6 +124,10 @@ async function main() {
     const destination = SUPPORTED_PLATFORMS[target];
     console.log(`Copying Node.js mobile project to ${destination}`);
     await copyNodeProject(destination);
+    const postStep = PLATFORM_POST_STEPS[target];
+    if (typeof postStep === 'function') {
+      await postStep();
+    }
   }
 
   console.log('Node.js mobile assets prepared successfully.');
