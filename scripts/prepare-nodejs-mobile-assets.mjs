@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { cp, mkdir, rm, stat, lstat, readdir, rename } from 'node:fs/promises';
+import { cp, mkdir, rm, stat, lstat, readdir, rename, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip } from 'node:zlib';
+import tarGzFactory from 'tar.gz2';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,12 +21,16 @@ const SUPPORTED_PLATFORMS = {
     'assets',
     'www',
     'nodejs-project'
-  )
+  ),
+  ios: join(projectRoot, 'ios', 'App', 'App', 'public', 'nodejs-project')
 };
 
 const PLATFORM_POST_STEPS = {
   async android() {
     await ensureAndroidNativeArtifacts();
+  },
+  async ios() {
+    await ensureIosNativeArtifacts();
   }
 };
 
@@ -118,6 +123,41 @@ async function ensureAndroidNativeArtifacts() {
   await ensureLibnodeUncompressed(appNativeRoot);
 }
 
+async function ensureIosNativeArtifacts() {
+  await patchCapacitorCliDirectoryGuard();
+  const pluginFrameworkRoot = join(
+    projectRoot,
+    'node_modules',
+    'nodejs-mobile-cordova',
+    'libs',
+    'ios',
+    'nodemobile'
+  );
+  await ensureNodeMobileFramework(pluginFrameworkRoot);
+
+  const capacitorPluginSource = join(
+    projectRoot,
+    'ios',
+    'capacitor-cordova-ios-plugins',
+    'sources',
+    'NodejsMobileCordova'
+  );
+  if (existsSync(capacitorPluginSource)) {
+    await ensureNodeMobileFramework(capacitorPluginSource);
+  }
+
+  const capacitorPluginResources = join(
+    projectRoot,
+    'ios',
+    'capacitor-cordova-ios-plugins',
+    'resources',
+    'NodejsMobileCordova'
+  );
+  if (existsSync(capacitorPluginResources)) {
+    await ensureNodeMobileFramework(capacitorPluginResources);
+  }
+}
+
 async function ensureLibnodeLayout(nativeRoot) {
   const libnodeRoot = join(nativeRoot, 'libnode');
   const binSource = join(nativeRoot, 'bin');
@@ -183,6 +223,88 @@ async function ensureLibnodeUncompressed(nativeRoot) {
 
 async function decompressGzip(source, destination) {
   await pipeline(createReadStream(source), createGunzip(), createWriteStream(destination));
+}
+
+async function ensureNodeMobileFramework(baseDir) {
+  if (!existsSync(baseDir)) {
+    return;
+  }
+
+  const nestedDir = join(baseDir, 'nodemobile');
+  if (existsSync(nestedDir)) {
+    await ensureNodeMobileFramework(nestedDir);
+  }
+
+  const archivePath = join(baseDir, 'NodeMobile.framework.tar.zip');
+  const frameworkDir = join(baseDir, 'NodeMobile.framework');
+
+  if (existsSync(archivePath)) {
+    await extractTarArchive(archivePath, baseDir);
+    await rm(archivePath, { force: true });
+  }
+
+  if (!existsSync(frameworkDir)) {
+    return;
+  }
+}
+
+async function extractTarArchive(source, destination) {
+  await new Promise((resolve, reject) => {
+    tarGzFactory()
+      .extract(source, destination, (error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+  });
+}
+
+async function patchCapacitorCliDirectoryGuard() {
+  const updateJsPath = join(
+    projectRoot,
+    'node_modules',
+    '@capacitor',
+    'cli',
+    'dist',
+    'ios',
+    'update.js'
+  );
+
+  if (!existsSync(updateJsPath)) {
+    return;
+  }
+
+  const marker = 'Skip directories when reading native plugin files';
+
+  let fileContent = await readFile(updateJsPath, 'utf-8');
+  if (fileContent.includes(marker)) {
+    return;
+  }
+
+  const originalSnippet =
+    "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
+    "            if (!codeFile.$.framework) {\n" +
+    "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
+
+  if (!fileContent.includes(originalSnippet)) {
+    console.warn('Unable to apply Capacitor CLI patch: expected snippet not found.');
+    return;
+  }
+
+  const patchedSnippet =
+    "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
+    "            if (!codeFile.$.framework) {\n" +
+    "                // Skip directories when reading native plugin files\n" +
+    "                const destStats = await (0, fs_extra_1.stat)(fileDest).catch(() => undefined);\n" +
+    "                if (!destStats || !destStats.isFile()) {\n" +
+    "                    continue;\n" +
+    "                }\n" +
+    "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
+
+  fileContent = fileContent.replace(originalSnippet, patchedSnippet);
+  await writeFile(updateJsPath, fileContent, 'utf-8');
 }
 
 async function main() {

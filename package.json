@@ -12,7 +12,7 @@
     "lint": "eslint",
     "node:install": "npm install --prefix nodejs-assets/nodejs-project --no-package-lock",
     "cap:sync:android": "npx cap sync android && node scripts/prepare-nodejs-mobile-assets.mjs android",
-    "cap:sync:ios": "npx cap sync ios && node scripts/prepare-nodejs-mobile-assets.mjs ios"
+    "cap:sync:ios": "node scripts/prepare-nodejs-mobile-assets.mjs ios && npx cap sync ios && node scripts/prepare-nodejs-mobile-assets.mjs ios"
   },
   "dependencies": {
     "@capacitor/android": "7.4.4",
@@ -27,8 +27,8 @@
     "@ionic/react": "^8.5.0",
     "@ionic/react-router": "^8.5.0",
     "@types/react-router": "^5.1.20",
-  "@types/react-router-dom": "^5.3.3",
-  "nodejs-mobile-cordova": "^0.3.4",
+    "@types/react-router-dom": "^5.3.3",
+    "nodejs-mobile-cordova": "^0.3.4",
     "ionicons": "^7.4.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
