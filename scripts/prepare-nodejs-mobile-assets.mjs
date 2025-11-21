@@ -1,28 +1,38 @@
-import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
-import { cp, mkdir, rm, stat, lstat, readdir, rename, readFile, writeFile } from 'node:fs/promises';
-import { existsSync, createReadStream, createWriteStream } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
-import { createGunzip } from 'node:zlib';
-import tarGzFactory from 'tar.gz2';
+import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import {
+  cp,
+  mkdir,
+  rm,
+  stat,
+  lstat,
+  readdir,
+  rename,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
+import { existsSync, createReadStream, createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
+import tarGzFactory from "tar.gz2";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const projectRoot = resolve(__dirname, '..');
-const nodeProjectSource = join(projectRoot, 'nodejs-assets', 'nodejs-project');
+const projectRoot = resolve(__dirname, "..");
+const nodeProjectSource = join(projectRoot, "nodejs-assets", "nodejs-project");
 
 const SUPPORTED_PLATFORMS = {
   android: join(
     projectRoot,
-    'android',
-    'capacitor-cordova-android-plugins',
-    'src',
-    'main',
-    'assets',
-    'www',
-    'nodejs-project'
+    "android",
+    "capacitor-cordova-android-plugins",
+    "src",
+    "main",
+    "assets",
+    "www",
+    "nodejs-project"
   ),
-  ios: join(projectRoot, 'ios', 'App', 'App', 'public', 'nodejs-project')
+  ios: join(projectRoot, "ios", "App", "App", "public", "nodejs-project"),
 };
 
 const PLATFORM_POST_STEPS = {
@@ -31,7 +41,7 @@ const PLATFORM_POST_STEPS = {
   },
   async ios() {
     await ensureIosNativeArtifacts();
-  }
+  },
 };
 
 function parseTargets() {
@@ -55,7 +65,7 @@ async function ensureNodeProjectExists() {
   try {
     const stats = await stat(nodeProjectSource);
     if (!stats.isDirectory()) {
-      throw new Error('Expected a directory at nodejs-assets/nodejs-project');
+      throw new Error("Expected a directory at nodejs-assets/nodejs-project");
     }
   } catch (error) {
     throw new Error(
@@ -71,36 +81,45 @@ async function copyNodeProject(destination) {
   await mkdir(destination, { recursive: true });
   await cp(nodeProjectSource, destination, {
     recursive: true,
-    filter: (source) => !source.replace(/\\/g, '/').includes('node_modules/noname-mobile')
+    filter: (source) =>
+      !source.replace(/\\/g, "/").includes("node_modules/noname-mobile"),
   });
 }
 
 async function pruneWorkspaceSymlink() {
-  const candidate = join(nodeProjectSource, 'node_modules', 'noname-mobile');
+  const candidate = join(nodeProjectSource, "node_modules", "noname-mobile");
   try {
     const info = await lstat(candidate);
     if (info.isSymbolicLink() || info.isDirectory()) {
       await rm(candidate, { recursive: true, force: true });
     }
   } catch (error) {
-    if (error.code !== 'ENOENT') {
+    if (error.code !== "ENOENT") {
       throw error;
     }
   }
 }
 
 async function ensureAndroidNativeArtifacts() {
-  const pluginProjectRoot = join(projectRoot, 'android', 'capacitor-cordova-android-plugins');
+  const pluginProjectRoot = join(
+    projectRoot,
+    "android",
+    "capacitor-cordova-android-plugins"
+  );
   const pluginNativeRoot = join(
     pluginProjectRoot,
-    'src',
-    'main',
-    'libs',
-    'cdvnodejsmobile'
+    "src",
+    "main",
+    "libs",
+    "cdvnodejsmobile"
   );
-  const pluginLegacyNativeRoot = join(pluginProjectRoot, 'libs', 'cdvnodejsmobile');
-  const appLibsRoot = join(projectRoot, 'android', 'app', 'libs');
-  const appNativeRoot = join(appLibsRoot, 'cdvnodejsmobile');
+  const pluginLegacyNativeRoot = join(
+    pluginProjectRoot,
+    "libs",
+    "cdvnodejsmobile"
+  );
+  const appLibsRoot = join(projectRoot, "android", "app", "libs");
+  const appNativeRoot = join(appLibsRoot, "cdvnodejsmobile");
 
   if (!existsSync(pluginNativeRoot)) {
     console.warn(
@@ -112,7 +131,7 @@ async function ensureAndroidNativeArtifacts() {
   await ensureLibnodeLayout(pluginNativeRoot);
   await ensureLibnodeUncompressed(pluginNativeRoot);
 
-  await mkdir(join(pluginProjectRoot, 'libs'), { recursive: true });
+  await mkdir(join(pluginProjectRoot, "libs"), { recursive: true });
   await rm(pluginLegacyNativeRoot, { recursive: true, force: true });
   await cp(pluginNativeRoot, pluginLegacyNativeRoot, { recursive: true });
 
@@ -127,34 +146,36 @@ async function ensureIosNativeArtifacts() {
   await patchCapacitorCliDirectoryGuard();
   const pluginFrameworkRoot = join(
     projectRoot,
-    'node_modules',
-    'nodejs-mobile-cordova',
-    'libs',
-    'ios',
-    'nodemobile'
+    "node_modules",
+    "nodejs-mobile-cordova",
+    "libs",
+    "ios",
+    "nodemobile"
   );
   await ensureNodeMobileFramework(pluginFrameworkRoot);
 
   const capacitorPluginSource = join(
     projectRoot,
-    'ios',
-    'capacitor-cordova-ios-plugins',
-    'sources',
-    'NodejsMobileCordova'
+    "ios",
+    "capacitor-cordova-ios-plugins",
+    "sources",
+    "NodejsMobileCordova"
   );
   if (existsSync(capacitorPluginSource)) {
     await ensureNodeMobileFramework(capacitorPluginSource);
+    await ensureNodeIncludeCompatibility(capacitorPluginSource);
   }
 
   const capacitorPluginResources = join(
     projectRoot,
-    'ios',
-    'capacitor-cordova-ios-plugins',
-    'resources',
-    'NodejsMobileCordova'
+    "ios",
+    "capacitor-cordova-ios-plugins",
+    "resources",
+    "NodejsMobileCordova"
   );
   if (existsSync(capacitorPluginResources)) {
     await ensureNodeMobileFramework(capacitorPluginResources);
+    await ensureNodeIncludeCompatibility(capacitorPluginResources);
   }
 
   await synchronizePodsCordovaPlugin();
@@ -163,11 +184,11 @@ async function ensureIosNativeArtifacts() {
 }
 
 async function ensureLibnodeLayout(nativeRoot) {
-  const libnodeRoot = join(nativeRoot, 'libnode');
-  const binSource = join(nativeRoot, 'bin');
-  const includeSource = join(nativeRoot, 'include');
-  const binDestination = join(libnodeRoot, 'bin');
-  const includeDestination = join(libnodeRoot, 'include');
+  const libnodeRoot = join(nativeRoot, "libnode");
+  const binSource = join(nativeRoot, "bin");
+  const includeSource = join(nativeRoot, "include");
+  const binDestination = join(libnodeRoot, "bin");
+  const includeDestination = join(libnodeRoot, "include");
 
   if (!existsSync(libnodeRoot)) {
     await mkdir(libnodeRoot, { recursive: true });
@@ -186,8 +207,8 @@ async function ensureLibnodeLayout(nativeRoot) {
 
 async function ensureLibnodeUncompressed(nativeRoot) {
   const binDirCandidates = [
-    join(nativeRoot, 'libnode', 'bin'),
-    join(nativeRoot, 'bin')
+    join(nativeRoot, "libnode", "bin"),
+    join(nativeRoot, "bin"),
   ];
   const binDir = binDirCandidates.find((candidate) => existsSync(candidate));
   if (!binDir) {
@@ -198,8 +219,8 @@ async function ensureLibnodeUncompressed(nativeRoot) {
   await Promise.all(
     architectures.map(async (arch) => {
       const archDir = join(binDir, arch);
-      const gzPath = join(archDir, 'libnode.so.gz');
-      const soPath = join(archDir, 'libnode.so');
+      const gzPath = join(archDir, "libnode.so.gz");
+      const soPath = join(archDir, "libnode.so");
       try {
         const gzStats = await stat(gzPath);
         if (gzStats.isFile()) {
@@ -208,7 +229,7 @@ async function ensureLibnodeUncompressed(nativeRoot) {
           await rm(gzPath, { force: true });
         }
       } catch (error) {
-        if (error.code !== 'ENOENT') {
+        if (error.code !== "ENOENT") {
           throw error;
         }
       }
@@ -219,14 +240,20 @@ async function ensureLibnodeUncompressed(nativeRoot) {
           throw new Error();
         }
       } catch {
-        throw new Error(`Missing libnode.so for architecture ${arch} at ${soPath}`);
+        throw new Error(
+          `Missing libnode.so for architecture ${arch} at ${soPath}`
+        );
       }
     })
   );
 }
 
 async function decompressGzip(source, destination) {
-  await pipeline(createReadStream(source), createGunzip(), createWriteStream(destination));
+  await pipeline(
+    createReadStream(source),
+    createGunzip(),
+    createWriteStream(destination)
+  );
 }
 
 async function ensureNodeMobileFramework(baseDir) {
@@ -234,13 +261,13 @@ async function ensureNodeMobileFramework(baseDir) {
     return;
   }
 
-  const nestedDir = join(baseDir, 'nodemobile');
+  const nestedDir = join(baseDir, "nodemobile");
   if (existsSync(nestedDir)) {
     await ensureNodeMobileFramework(nestedDir);
   }
 
-  const archivePath = join(baseDir, 'NodeMobile.framework.tar.zip');
-  const frameworkDir = join(baseDir, 'NodeMobile.framework');
+  const archivePath = join(baseDir, "NodeMobile.framework.tar.zip");
+  const frameworkDir = join(baseDir, "NodeMobile.framework");
 
   if (existsSync(archivePath)) {
     await extractTarArchive(archivePath, baseDir);
@@ -254,38 +281,38 @@ async function ensureNodeMobileFramework(baseDir) {
 
 async function extractTarArchive(source, destination) {
   await new Promise((resolve, reject) => {
-    tarGzFactory()
-      .extract(source, destination, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
+    tarGzFactory().extract(source, destination, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
 async function patchCapacitorCliDirectoryGuard() {
   const updateJsPath = join(
     projectRoot,
-    'node_modules',
-    '@capacitor',
-    'cli',
-    'dist',
-    'ios',
-    'update.js'
+    "node_modules",
+    "@capacitor",
+    "cli",
+    "dist",
+    "ios",
+    "update.js"
   );
 
   if (!existsSync(updateJsPath)) {
     return;
   }
 
-  const skipMarker = 'Skip directories when reading native plugin files';
-  const frameworkMarker = 'Normalize custom framework names';
+  const skipMarker = "Skip directories when reading native plugin files";
+  const frameworkMarker = "Normalize custom framework names";
 
-  let fileContent = await readFile(updateJsPath, 'utf-8');
+  let fileContent = await readFile(updateJsPath, "utf-8");
   let updatedContent = fileContent;
-  const getFrameworkRegex = /function getFrameworkName\(framework\) {\r?\n[\s\S]*?\r?\n}/;
+  const getFrameworkRegex =
+    /function getFrameworkName\(framework\) {\r?\n[\s\S]*?\r?\n}/;
 
   if (!updatedContent.includes(skipMarker)) {
     const originalSnippet =
@@ -294,7 +321,9 @@ async function patchCapacitorCliDirectoryGuard() {
       "                let fileContent = await (0, fs_extra_1.readFile)(fileDest, { encoding: 'utf-8' });\n";
 
     if (!updatedContent.includes(originalSnippet)) {
-      console.warn('Unable to apply Capacitor CLI patch: expected snippet not found.');
+      console.warn(
+        "Unable to apply Capacitor CLI patch: expected snippet not found."
+      );
     } else {
       const patchedSnippet =
         "            await (0, fs_extra_1.copy)(filePath, fileDest);\n" +
@@ -311,12 +340,14 @@ async function patchCapacitorCliDirectoryGuard() {
   }
 
   const existingFrameworkFunction = updatedContent.match(getFrameworkRegex);
-  const frameworkFunctionText = existingFrameworkFunction ? existingFrameworkFunction[0] : '';
+  const frameworkFunctionText = existingFrameworkFunction
+    ? existingFrameworkFunction[0]
+    : "";
   const frameworkPattern = String.raw`framework.$.src.replace(/\\/g, '/')`;
   const needsFrameworkPatch =
     !existingFrameworkFunction ||
     !frameworkFunctionText.includes(frameworkMarker) ||
-    !frameworkFunctionText.includes('return normalizedSrc;') ||
+    !frameworkFunctionText.includes("return normalizedSrc;") ||
     !frameworkFunctionText.includes(frameworkPattern);
 
   if (needsFrameworkPatch) {
@@ -335,38 +366,51 @@ async function patchCapacitorCliDirectoryGuard() {
 }`;
 
     if (!existingFrameworkFunction) {
-      console.warn('Unable to apply Capacitor CLI patch: framework helper not found.');
+      console.warn(
+        "Unable to apply Capacitor CLI patch: framework helper not found."
+      );
     }
 
     updatedContent = updatedContent.replace(getFrameworkRegex, patchedFunction);
   }
 
   if (updatedContent !== fileContent) {
-    await writeFile(updateJsPath, updatedContent, 'utf-8');
+    await writeFile(updateJsPath, updatedContent, "utf-8");
   }
 }
 
 async function synchronizePodsCordovaPlugin() {
-  const podsRoot = join(projectRoot, 'ios', 'App', 'Pods', 'CordovaPlugins');
-  const sourceRoot = join(projectRoot, 'ios', 'capacitor-cordova-ios-plugins', 'sources', 'NodejsMobileCordova');
+  const podsRoot = join(projectRoot, "ios", "App", "Pods", "CordovaPlugins");
+  const sourceRoot = join(
+    projectRoot,
+    "ios",
+    "capacitor-cordova-ios-plugins",
+    "sources",
+    "NodejsMobileCordova"
+  );
 
   if (!existsSync(podsRoot) || !existsSync(sourceRoot)) {
     return;
   }
 
-  const podSourcesDestination = join(podsRoot, 'sources', 'NodejsMobileCordova');
+  const podSourcesDestination = join(
+    podsRoot,
+    "sources",
+    "NodejsMobileCordova"
+  );
   await copyDirectory(sourceRoot, podSourcesDestination);
 
-  const podPluginsRoot = join(podsRoot, 'Plugins', 'nodejs-mobile-cordova');
+  const podPluginsRoot = join(podsRoot, "Plugins", "nodejs-mobile-cordova");
   if (existsSync(podPluginsRoot)) {
-    const includeSource = join(sourceRoot, 'include');
+    const includeSource = join(sourceRoot, "include");
     if (existsSync(includeSource)) {
-      await copyDirectory(includeSource, join(podPluginsRoot, 'include'));
+      await copyDirectory(includeSource, join(podPluginsRoot, "include"));
+      await ensureNodeIncludeCompatibility(podPluginsRoot);
     }
 
-    const libsSource = join(sourceRoot, 'libs');
+    const libsSource = join(sourceRoot, "libs");
     if (existsSync(libsSource)) {
-      await copyDirectory(libsSource, join(podPluginsRoot, 'libs'));
+      await copyDirectory(libsSource, join(podPluginsRoot, "libs"));
     }
   }
 }
@@ -383,41 +427,66 @@ async function copyDirectory(source, destination) {
 async function normalizeCordovaPodspec() {
   const podspecPath = join(
     projectRoot,
-    'ios',
-    'capacitor-cordova-ios-plugins',
-    'CordovaPlugins.podspec'
+    "ios",
+    "capacitor-cordova-ios-plugins",
+    "CordovaPlugins.podspec"
   );
 
   if (!existsSync(podspecPath)) {
     return;
   }
 
-  let fileContent = await readFile(podspecPath, 'utf-8');
+  let fileContent = await readFile(podspecPath, "utf-8");
   const normalized = fileContent
-    .replace(/\\/g, '/')
-    .replace(/(s\.frameworks\s*=\s*')(.*?)(')/, (_match, prefix, value, suffix) => {
-      if (!/[\\/]/.test(value)) {
-        return `${prefix}${value}${suffix}`;
+    .replace(/\\/g, "/")
+    .replace(
+      /(s\.frameworks\s*=\s*')(.*?)(')/,
+      (_match, prefix, value, suffix) => {
+        if (!/[\\/]/.test(value)) {
+          return `${prefix}${value}${suffix}`;
+        }
+        const parts = value.split(/[\\/]/).filter(Boolean);
+        const frameworkName =
+          parts.length > 0 ? parts[parts.length - 1] : value;
+        return `${prefix}${frameworkName}${suffix}`;
       }
-      const parts = value.split(/[\\/]/).filter(Boolean);
-      const frameworkName = parts.length > 0 ? parts[parts.length - 1] : value;
-      return `${prefix}${frameworkName}${suffix}`;
-    });
+    );
 
   if (normalized !== fileContent) {
-    await writeFile(podspecPath, normalized, 'utf-8');
+    await writeFile(podspecPath, normalized, "utf-8");
+  }
+}
+
+async function ensureNodeIncludeCompatibility(baseDir) {
+  const includeRoot = join(baseDir, "include");
+  const nodeIncludeRoot = join(includeRoot, "node");
+  if (!existsSync(includeRoot) || !existsSync(nodeIncludeRoot)) {
+    return;
+  }
+
+  const mirrorDirs = ["uv"];
+  for (const dir of mirrorDirs) {
+    const sourceDir = join(nodeIncludeRoot, dir);
+    if (!existsSync(sourceDir)) {
+      continue;
+    }
+    const destinationDir = join(includeRoot, dir);
+    await rm(destinationDir, { recursive: true, force: true });
+    await cp(sourceDir, destinationDir, { recursive: true });
   }
 }
 
 async function main() {
   const targets = parseTargets();
   if (targets.length === 0) {
-    console.log('No supported platforms requested. Nothing to do.');
+    console.log("No supported platforms requested. Nothing to do.");
     return;
   }
 
   if (!existsSync(nodeProjectSource)) {
-    throw new Error('Node.js mobile project missing. Run "npm run node:install" first.');
+    throw new Error(
+      'Node.js mobile project missing. Run "npm run node:install" first.'
+    );
   }
 
   await ensureNodeProjectExists();
@@ -427,12 +496,12 @@ async function main() {
     console.log(`Copying Node.js mobile project to ${destination}`);
     await copyNodeProject(destination);
     const postStep = PLATFORM_POST_STEPS[target];
-    if (typeof postStep === 'function') {
+    if (typeof postStep === "function") {
       await postStep();
     }
   }
 
-  console.log('Node.js mobile assets prepared successfully.');
+  console.log("Node.js mobile assets prepared successfully.");
 }
 
 main().catch((error) => {

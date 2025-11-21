@@ -1,21 +1,21 @@
-const nodejs = require('nodejs-mobile-cordova');
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
-const http = require('http');
-const AdmZip = require('adm-zip');
-const nodeStatic = require('node-static');
-const vm = require('vm');
-const Module = require('module');
+const nodejs = require("nodejs-mobile-cordova");
+const fs = require("fs");
+const path = require("path");
+const https = require("https");
+const http = require("http");
+const AdmZip = require("adm-zip");
+const nodeStatic = require("node-static");
+const vm = require("vm");
+const Module = require("module");
 
-const DEFAULT_REPO = 'https://github.com/libnoname/noname.git';
-const resourcesRoot = path.join(process.cwd(), 'resources');
-const downloadsRoot = path.join(process.cwd(), 'downloads');
-const metadataPath = path.join(resourcesRoot, 'metadata.json');
+const DEFAULT_REPO = "https://github.com/libnoname/noname.git";
+const resourcesRoot = path.join(process.cwd(), "resources");
+const downloadsRoot = path.join(process.cwd(), "downloads");
+const metadataPath = path.join(resourcesRoot, "metadata.json");
 
 let currentConfig = {
   resourceUrl: DEFAULT_REPO,
-  branch: 'main',
+  branch: "main",
   version: null,
 };
 let wssController = null;
@@ -25,16 +25,17 @@ let staticServerPort = null;
 ensureDirectories();
 loadMetadata();
 
-nodejs.channel.on('message', async (data) => {
+nodejs.channel.on("message", async (raw) => {
+  const data = normalizeMessage(raw);
   try {
-    if (!data || typeof data !== 'object') {
+    if (!data || typeof data !== "object") {
       return;
     }
     switch (data.type) {
-      case 'get-state':
+      case "get-state":
         sendState();
         break;
-      case 'set-resource-url':
+      case "set-resource-url":
         if (data.payload && data.payload.url) {
           currentConfig.resourceUrl = data.payload.url;
           if (data.payload.branch) {
@@ -44,22 +45,22 @@ nodejs.channel.on('message', async (data) => {
           sendState();
         }
         break;
-      case 'download-resources':
+      case "download-resources":
         await handleDownload();
         break;
-      case 'start-server':
+      case "start-server":
         await startWsServer();
         break;
-      case 'stop-server':
+      case "stop-server":
         stopWsServer();
         break;
-      case 'start-web':
+      case "start-web":
         await startStaticServer();
         break;
-      case 'stop-web':
+      case "stop-web":
         stopStaticServer();
         break;
-      case 'shutdown':
+      case "shutdown":
         stopStaticServer();
         stopWsServer();
         process.exit(0);
@@ -72,7 +73,7 @@ nodejs.channel.on('message', async (data) => {
   }
 });
 
-nodejs.channel.send({ type: 'ready', payload: stateSnapshot() });
+nodejs.channel.send({ type: "ready", payload: stateSnapshot() });
 
 function ensureDirectories() {
   if (!fs.existsSync(resourcesRoot)) {
@@ -86,19 +87,23 @@ function ensureDirectories() {
 function loadMetadata() {
   try {
     if (fs.existsSync(metadataPath)) {
-      const raw = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+      const raw = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
       currentConfig = { ...currentConfig, ...raw };
     }
   } catch (err) {
-    console.error('Failed to load metadata', err);
+    console.error("Failed to load metadata", err);
   }
 }
 
 function saveMetadata() {
   try {
-    fs.writeFileSync(metadataPath, JSON.stringify(currentConfig, null, 2), 'utf8');
+    fs.writeFileSync(
+      metadataPath,
+      JSON.stringify(currentConfig, null, 2),
+      "utf8"
+    );
   } catch (err) {
-    console.error('Failed to save metadata', err);
+    console.error("Failed to save metadata", err);
   }
 }
 
@@ -115,12 +120,12 @@ function stateSnapshot() {
 }
 
 function sendState() {
-  nodejs.channel.send({ type: 'state', payload: stateSnapshot() });
+  nodejs.channel.send({ type: "state", payload: stateSnapshot() });
 }
 
 function sendError(err, context) {
   nodejs.channel.send({
-    type: 'error',
+    type: "error",
     payload: {
       context,
       message: err?.message || String(err),
@@ -128,31 +133,90 @@ function sendError(err, context) {
   });
 }
 
+function normalizeMessage(raw) {
+  if (!raw) {
+    return null;
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    return raw;
+  }
+  if (Array.isArray(raw)) {
+    const [first] = raw;
+    if (first && typeof first === "object") {
+      return first;
+    }
+    if (typeof first === "string") {
+      return safeParse(first);
+    }
+    return null;
+  }
+  if (typeof raw === "string") {
+    const parsed = safeParse(raw);
+    if (parsed && typeof parsed === "object") {
+      if (
+        parsed.event === "message" &&
+        Array.isArray(parsed.payload) &&
+        parsed.payload.length > 0
+      ) {
+        const [payload] = parsed.payload;
+        if (payload && typeof payload === "object") {
+          return payload;
+        }
+        return safeParse(payload);
+      }
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function safeParse(candidate) {
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    return null;
+  }
+}
+
 async function handleDownload() {
-  nodejs.channel.send({ type: 'download-started' });
-  const { downloadUrl, branch, version } = await resolveSource(currentConfig.resourceUrl, currentConfig.branch);
+  nodejs.channel.send({ type: "download-started" });
+  const { downloadUrl, branch, version } = await resolveSource(
+    currentConfig.resourceUrl,
+    currentConfig.branch
+  );
   currentConfig.branch = branch;
 
-  const archivePath = path.join(downloadsRoot, 'resource.zip');
+  const archivePath = path.join(downloadsRoot, "resource.zip");
   await downloadToFile(downloadUrl, archivePath);
   await unpackResource(archivePath);
 
   currentConfig.version = version || new Date().toISOString();
   saveMetadata();
-  nodejs.channel.send({ type: 'download-complete', payload: stateSnapshot() });
+  nodejs.channel.send({ type: "download-complete", payload: stateSnapshot() });
 }
 
 function resolveSource(url, branchFallback) {
-  if (url.endsWith('.git')) {
+  if (url.endsWith(".git")) {
     return resolveGitHub(url, branchFallback);
   }
-  return Promise.resolve({ downloadUrl: url, branch: branchFallback || 'main', version: null });
+  return Promise.resolve({
+    downloadUrl: url,
+    branch: branchFallback || "main",
+    version: null,
+  });
 }
 
 function resolveGitHub(repoUrl, branchFallback) {
   const matches = repoUrl.match(/github.com\/(.+?)\/(.+?)(?:\.git)?$/);
   if (!matches) {
-    return Promise.resolve({ downloadUrl: repoUrl, branch: branchFallback || 'main', version: null });
+    return Promise.resolve({
+      downloadUrl: repoUrl,
+      branch: branchFallback || "main",
+      version: null,
+    });
   }
   const owner = matches[1];
   const repo = matches[2];
@@ -179,27 +243,27 @@ function resolveBranch(owner, repo, branchFallback) {
   }
   return fetchJson(`https://api.github.com/repos/${owner}/${repo}`)
     .then((json) => {
-      if (json && typeof json.default_branch === 'string') {
+      if (json && typeof json.default_branch === "string") {
         return json.default_branch;
       }
-      return 'main';
+      return "main";
     })
-    .catch(() => 'main');
+    .catch(() => "main");
 }
 
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
     const options = new URL(url);
-    options.headers = { 'User-Agent': 'noname-mobile' };
-    const client = options.protocol === 'http:' ? http : https;
+    options.headers = { "User-Agent": "noname-mobile" };
+    const client = options.protocol === "http:" ? http : https;
     client
       .get(options, (res) => {
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
           body += chunk;
         });
-        res.on('end', () => {
+        res.on("end", () => {
           try {
             resolve(JSON.parse(body));
           } catch (err) {
@@ -207,34 +271,41 @@ function fetchJson(url) {
           }
         });
       })
-      .on('error', reject);
+      .on("error", reject);
   });
 }
 
 function downloadToFile(url, destinationPath) {
   return new Promise((resolve, reject) => {
     const options = new URL(url);
-    options.headers = { 'User-Agent': 'noname-mobile' };
-    const client = options.protocol === 'http:' ? http : https;
+    options.headers = { "User-Agent": "noname-mobile" };
+    const client = options.protocol === "http:" ? http : https;
     const fileStream = fs.createWriteStream(destinationPath);
     client
       .get(options, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
           fileStream.close();
           fs.rmSync(destinationPath, { force: true });
-          downloadToFile(res.headers.location, destinationPath).then(resolve).catch(reject);
+          downloadToFile(res.headers.location, destinationPath)
+            .then(resolve)
+            .catch(reject);
           return;
         }
         if (res.statusCode && res.statusCode >= 400) {
           reject(new Error(`Download failed with status ${res.statusCode}`));
           return;
         }
-        const total = Number(res.headers['content-length'] || 0);
+        const total = Number(res.headers["content-length"] || 0);
         let downloaded = 0;
-        res.on('data', (chunk) => {
+        res.on("data", (chunk) => {
           downloaded += chunk.length;
           nodejs.channel.send({
-            type: 'download-progress',
+            type: "download-progress",
             payload: {
               downloaded,
               total,
@@ -242,11 +313,11 @@ function downloadToFile(url, destinationPath) {
           });
         });
         res.pipe(fileStream);
-        fileStream.on('finish', () => {
+        fileStream.on("finish", () => {
           fileStream.close(resolve);
         });
       })
-      .on('error', (err) => {
+      .on("error", (err) => {
         fs.rmSync(destinationPath, { force: true });
         reject(err);
       });
@@ -254,7 +325,7 @@ function downloadToFile(url, destinationPath) {
 }
 
 async function unpackResource(archivePath) {
-  const tempDir = path.join(downloadsRoot, 'extracted');
+  const tempDir = path.join(downloadsRoot, "extracted");
   if (fs.existsSync(tempDir)) {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -265,9 +336,12 @@ async function unpackResource(archivePath) {
 
   const entries = fs.readdirSync(tempDir);
   if (!entries.length) {
-    throw new Error('Archive did not contain any files');
+    throw new Error("Archive did not contain any files");
   }
-  const rootFolderName = entries.find((entry) => fs.statSync(path.join(tempDir, entry)).isDirectory()) ?? entries[0];
+  const rootFolderName =
+    entries.find((entry) =>
+      fs.statSync(path.join(tempDir, entry)).isDirectory()
+    ) ?? entries[0];
   const extractedRoot = path.join(tempDir, rootFolderName);
   const resourcePath = getResourcePath();
   if (fs.existsSync(resourcePath)) {
@@ -280,7 +354,7 @@ async function unpackResource(archivePath) {
 }
 
 function getResourcePath() {
-  return path.join(resourcesRoot, 'noname');
+  return path.join(resourcesRoot, "noname");
 }
 
 async function startWsServer() {
@@ -288,21 +362,21 @@ async function startWsServer() {
     return;
   }
   const resourcePath = getResourcePath();
-  const serverScriptPath = path.join(resourcePath, 'game', 'server.js');
+  const serverScriptPath = path.join(resourcePath, "game", "server.js");
   if (!fs.existsSync(serverScriptPath)) {
-    throw new Error('server.js not found in resources');
+    throw new Error("server.js not found in resources");
   }
 
-  const scriptContent = fs.readFileSync(serverScriptPath, 'utf8');
-  const wsModule = require('ws');
+  const scriptContent = fs.readFileSync(serverScriptPath, "utf8");
+  const wsModule = require("ws");
   let capturedServer = null;
 
   const contextRequire = createModuleRequire(serverScriptPath);
   const wrappedRequire = (specifier) => {
-    if (specifier === 'ws') {
+    if (specifier === "ws") {
       return new Proxy(wsModule, {
         get(target, prop) {
-          if (prop === 'Server') {
+          if (prop === "Server") {
             const OriginalServer = target.Server;
             return class WrappedServer extends OriginalServer {
               constructor(opts) {
@@ -334,7 +408,7 @@ async function startWsServer() {
   vm.runInContext(scriptContent, sandbox, { filename: serverScriptPath });
 
   if (!capturedServer) {
-    throw new Error('Failed to start WebSocket server');
+    throw new Error("Failed to start WebSocket server");
   }
 
   wssController = {
@@ -343,7 +417,7 @@ async function startWsServer() {
       try {
         capturedServer.close();
       } catch (err) {
-        console.error('Error closing ws server', err);
+        console.error("Error closing ws server", err);
       } finally {
         capturedServer = null;
         wssController = null;
@@ -351,7 +425,7 @@ async function startWsServer() {
     },
   };
 
-  nodejs.channel.send({ type: 'server-started' });
+  nodejs.channel.send({ type: "server-started" });
   sendState();
 }
 
@@ -360,7 +434,7 @@ function stopWsServer() {
     return;
   }
   wssController.close();
-  nodejs.channel.send({ type: 'server-stopped' });
+  nodejs.channel.send({ type: "server-stopped" });
   sendState();
 }
 
@@ -373,33 +447,41 @@ function createModuleRequire(basePath) {
 
 async function startStaticServer() {
   if (staticServer) {
-    nodejs.channel.send({ type: 'web-started', payload: { port: staticServerPort } });
+    nodejs.channel.send({
+      type: "web-started",
+      payload: { port: staticServerPort },
+    });
     return;
   }
   const resourcePath = getResourcePath();
   if (!fs.existsSync(resourcePath)) {
-    throw new Error('Resources not downloaded');
+    throw new Error("Resources not downloaded");
   }
   const webRoot = resourcePath;
   const fileServer = new nodeStatic.Server(webRoot);
   staticServerPort = 8321;
 
   staticServer = http.createServer((req, res) => {
-    req.on('end', () => {
-      fileServer.serve(req, res, (err) => {
-        if (err) {
-          res.writeHead(err.status, err.headers);
-          res.end(err.message);
-        }
-      });
-    }).resume();
+    req
+      .on("end", () => {
+        fileServer.serve(req, res, (err) => {
+          if (err) {
+            res.writeHead(err.status, err.headers);
+            res.end(err.message);
+          }
+        });
+      })
+      .resume();
   });
 
   await new Promise((resolve, reject) => {
-    staticServer.on('error', reject);
-    staticServer.listen(staticServerPort, '127.0.0.1', resolve);
+    staticServer.on("error", reject);
+    staticServer.listen(staticServerPort, "127.0.0.1", resolve);
   });
-  nodejs.channel.send({ type: 'web-started', payload: { port: staticServerPort } });
+  nodejs.channel.send({
+    type: "web-started",
+    payload: { port: staticServerPort },
+  });
 }
 
 function stopStaticServer() {
@@ -409,9 +491,9 @@ function stopStaticServer() {
   try {
     staticServer.close();
   } catch (err) {
-    console.error('Error closing static server', err);
+    console.error("Error closing static server", err);
   }
   staticServer = null;
   staticServerPort = null;
-  nodejs.channel.send({ type: 'web-stopped' });
+  nodejs.channel.send({ type: "web-stopped" });
 }
